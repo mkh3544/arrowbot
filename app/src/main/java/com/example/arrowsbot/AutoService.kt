@@ -61,6 +61,8 @@ class AutoService : AccessibilityService() {
                     return
                 }
 
+                val screenWidth = bitmap.width
+                val screenHeight = bitmap.height
                 val taps = try {
                     Solver.findTaps(bitmap)
                 } catch (_: Exception) {
@@ -73,9 +75,8 @@ class AutoService : AccessibilityService() {
                 if (taps.isEmpty()) {
                     idleCycles++
                     if (idleCycles >= 2) {
-                        // Continue button position is configurable in Solver.Config.
-                        tap(resources.displayMetrics.widthPixels * Config.CONT_X,
-                            resources.displayMetrics.heightPixels * Config.CONT_Y)
+                        // Use screenshot dimensions so coordinates match the captured display.
+                        tap(screenWidth * Config.CONT_X, screenHeight * Config.CONT_Y)
                         idleCycles = 0
                     }
                     scheduleNext(1_200L)
