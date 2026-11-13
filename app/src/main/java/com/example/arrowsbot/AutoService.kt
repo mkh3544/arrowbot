@@ -12,42 +12,89 @@ import android.view.accessibility.AccessibilityEvent
 class AutoService : AccessibilityService() {
     companion object {
         @Volatile var instance: AutoService? = null
+        @Volatile var statusMessage: String = "Stopped"
     }
 
     private val handler = Handler(Looper.getMainLooper())
     @Volatile private var running = false
-    private var idleCycles = 0
+    @Volatile private var targetGamePackage: String? = null
+
+    private val launcherAndSystemPackages = setOf(
+        "com.miui.home",
+        "com.android.launcher",
+        "com.android.launcher3",
+        "com.google.android.apps.nexuslauncher",
+        "com.android.systemui"
+    )
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        statusMessage = "Accessibility connected"
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
-    override fun onInterrupt() { stop() }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (!running) return
+        val pkg = event?.packageName?.toString() ?: return
+        if (pkg == packageName || pkg in launcherAndSystemPackages) return
+
+        val current = targetGamePackage
+        if (current == null) {
+            targetGamePackage = pkg
+            statusMessage = "Game detected: $pkg"
+        } else if (pkg != current) {
+            stopWithStatus("Stopped: game is no longer in the foreground")
+        }
+    }
+
+    override fun onInterrupt() {
+        stopWithStatus("Stopped: accessibility interrupted")
+    }
 
     override fun onDestroy() {
-        stop()
+        stopWithStatus("Stopped")
         if (instance === this) instance = null
         super.onDestroy()
     }
 
     fun startDelayed() {
         stop()
+        targetGamePackage = null
         running = true
-        idleCycles = 0
-        handler.postDelayed({ cycle() }, 5_000L)
+        statusMessage = "Waiting for the game… open the game now"
+        handler.postDelayed({
+            if (running) {
+                if (targetGamePackage == null) {
+                    stopWithStatus("No game detected. Open the game and press Start again.")
+                } else {
+                    cycle()
+                }
+            }
+        }, 5_000L)
     }
 
     fun stop() {
         running = false
+        targetGamePackage = null
         handler.removeCallbacksAndMessages(null)
+        statusMessage = "Stopped by user"
+    }
+
+    private fun stopWithStatus(message: String) {
+        running = false
+        targetGamePackage = null
+        handler.removeCallbacksAndMessages(null)
+        statusMessage = message
     }
 
     private fun cycle() {
-        if (!running) return
+        if (!running || targetGamePackage == null) return
         takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
             override fun onSuccess(result: ScreenshotResult) {
+                if (!running) {
+                    result.hardwareBuffer.close()
+                    return
+                }
                 val buffer = result.hardwareBuffer
                 val bitmap = try {
                     Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
@@ -57,48 +104,36 @@ class AutoService : AccessibilityService() {
                 }
 
                 if (bitmap == null) {
-                    scheduleNext(1_200L)
+                    stopWithStatus("Stopped: could not read the game screen")
                     return
                 }
 
-                val screenWidth = bitmap.width
-                val screenHeight = bitmap.height
-                val taps = try {
-                    Solver.findTaps(bitmap)
+                val candidate = try {
+                    Solver.findTaps(bitmap).firstOrNull()
                 } catch (_: Exception) {
-                    emptyList()
+                    null
                 } finally {
                     bitmap.recycle()
                 }
 
                 if (!running) return
-                if (taps.isEmpty()) {
-                    idleCycles++
-                    if (idleCycles >= 2) {
-                        // Use screenshot dimensions so coordinates match the captured display.
-                        tap(screenWidth * Config.CONT_X, screenHeight * Config.CONT_Y)
-                        idleCycles = 0
-                    }
-                    scheduleNext(1_200L)
-                } else {
-                    idleCycles = 0
-                    taps.forEachIndexed { index, point ->
-                        handler.postDelayed({
-                            if (running) tap(point.x.toFloat(), point.y.toFloat())
-                        }, index * 250L)
-                    }
-                    scheduleNext(taps.size * 250L + 1_200L)
+                if (candidate == null) {
+                    // No blind/fixed-coordinate tap and no automatic next-level action.
+                    stopWithStatus("Paused: no verified move found. Check the board, then press Start for the next stage.")
+                    return
                 }
+
+                statusMessage = "Making one move, then checking the board again…"
+                tap(candidate.x.toFloat(), candidate.y.toFloat())
+                handler.postDelayed({
+                    if (running) cycle()
+                }, 1_000L)
             }
 
             override fun onFailure(errorCode: Int) {
-                scheduleNext(1_500L)
+                stopWithStatus("Stopped: screenshot failed ($errorCode)")
             }
         })
-    }
-
-    private fun scheduleNext(delay: Long) {
-        if (running) handler.postDelayed({ cycle() }, delay)
     }
 
     private fun tap(x: Float, y: Float) {
