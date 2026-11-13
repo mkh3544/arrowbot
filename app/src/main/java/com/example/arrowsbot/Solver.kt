@@ -34,7 +34,7 @@ object Solver {
         val scaled = Bitmap.createScaledBitmap(src, width, height, true)
         val pixels = IntArray(width * height)
         try {
-            scaled.getPixels(pixels, 0, width, 0, 0, height)
+            scaled.getPixels(pixels, 0, width, 0, 0, width, height)
         } finally {
             if (scaled !== src) scaled.recycle()
         }
