@@ -64,11 +64,12 @@ object Solver {
         val labels = IntArray(width * height)
         val queue = IntArray(width * height)
         val components = ArrayList<Component>()
+        var nextComponentId = 1
         for (start in 0 until width * height) {
             if (!ink[start] || labels[start] != 0) continue
             var head = 0
             var tail = 0
-            val id = components.size + 1
+            val id = nextComponentId++
             queue[tail++] = start
             labels[start] = id
             while (head < tail) {
