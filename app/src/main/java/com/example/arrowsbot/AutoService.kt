@@ -36,7 +36,11 @@ class AutoService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!running) return
         val pkg = event?.packageName?.toString() ?: return
-        if (pkg == packageName || pkg in launcherAndSystemPackages) return
+        if (pkg == packageName) return
+        if (pkg in launcherAndSystemPackages) {
+            stopWithStatus("Stopped: game is no longer in the foreground")
+            return
+        }
 
         val current = targetGamePackage
         if (current == null) {
@@ -119,7 +123,7 @@ class AutoService : AccessibilityService() {
                 if (!running) return
                 if (candidate == null) {
                     // No blind/fixed-coordinate tap and no automatic next-level action.
-                    stopWithStatus("Paused: no verified move found. Check the board, then press Start for the next stage.")
+                    stopWithStatus("Paused: no safe move detected or stage finished. Check the board, then press Start / Next stage.")
                     return
                 }
 
