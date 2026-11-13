@@ -20,7 +20,7 @@ class MainActivity : Activity() {
             setPadding(40, 64, 40, 40)
         }
         layout.addView(TextView(this).apply {
-            text = "ARROWS BOT\n\n1. Enable the accessibility service.\n2. Return here and press Start.\n3. Open the puzzle within 5 seconds.\n\nPress Stop to end automation."
+            text = "ARROWS BOT\n\n1. Enable the accessibility service.\n2. Return here and press Start.\n3. Open the puzzle within 5 seconds.\n4. After the bot pauses, press Start / Next stage only when you are ready.\n\nPress Stop to end automation."
             textSize = 18f
             setPadding(0, 0, 0, 28)
         })
@@ -39,7 +39,7 @@ class MainActivity : Activity() {
         addButton("Accessibility settings") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
-        addButton("Start") {
+        addButton("Start / Next stage") {
             val service = AutoService.instance
             if (service == null) {
                 Toast.makeText(this, "Enable Arrows Bot in Accessibility settings first.", Toast.LENGTH_LONG).show()
